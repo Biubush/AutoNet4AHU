@@ -1,0 +1,168 @@
+name: 构建并发布
+
+on:
+  push:
+    tags:
+      - 'v*' # 当推送带有v开头的标签时触发，如v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: 获取版本号
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      shell: bash
+        
+    - name: 安装通用依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka
+        pip install virtualenv
+      
+    - name: 编译loginCore模块
+      shell: cmd
+      run: |
+        REM 创建虚拟环境
+        python -m virtualenv loginCore_env
+        
+        REM 激活虚拟环境
+        call loginCore_env\Scripts\activate.bat
+        
+        REM 安装依赖并编译
+        cd loginCore
+        pip install -r requirements.txt
+        
+        REM 使用动态版本号替换默认编译脚本并自动确认下载依赖
+        python -m nuitka --standalone ^
+          --onefile ^
+          --follow-imports ^
+          --include-package=requests ^
+          --windows-console-mode=disable ^
+          --assume-yes-for-downloads ^
+          --output-dir=..\UI ^
+          --output-filename=login.exe ^
+          --windows-file-version="${{ steps.get_version.outputs.VERSION }}" ^
+          --windows-product-version="${{ steps.get_version.outputs.VERSION }}" ^
+          main.py
+        
+        REM 检查是否生成了login.exe
+        cd ..
+        dir UI\login.exe
+        if not exist "UI\login.exe" (
+          echo "ERROR: login.exe文件未生成"
+          exit /b 1
+        )
+        
+        REM 退出虚拟环境
+        call deactivate
+        
+    - name: 编译UI模块
+      shell: cmd
+      run: |
+        REM 创建虚拟环境
+        python -m virtualenv UI_env
+        
+        REM 激活虚拟环境
+        call UI_env\Scripts\activate.bat
+        
+        REM 安装依赖并编译
+        cd UI
+        pip install -r requirements.txt
+        
+        REM 确认login.exe已存在
+        if not exist "login.exe" (
+          echo "ERROR: login.exe不存在于UI目录"
+          exit /b 1
+        )
+        
+        REM 使用动态版本号替换默认编译脚本
+        python -m nuitka --standalone ^
+          --windows-console-mode=disable ^
+          --enable-plugin=pyside6 ^
+          --assume-yes-for-downloads ^
+          --output-filename="AutoNet4AHU.exe" ^
+          --windows-company-name="biubush" ^
+          --windows-product-name="AutoNet4AHU" ^
+          --windows-file-version="${{ steps.get_version.outputs.VERSION }}" ^
+          --windows-product-version="${{ steps.get_version.outputs.VERSION }}" ^
+          --windows-file-description="This Campus Network Auto-Login Program is specifically designed for students and staff at Anhui University (AHU) to automatically log in to the campus network. It aims to streamline the process of accessing the internet by eliminating the need for manual login each time the network connection changes." ^
+          --windows-icon-from-ico=icon.ico ^
+          --copyright="Copyright 2025 biubush" ^
+          --output-dir=..\dist ui.py
+        
+        REM 退出虚拟环境
+        cd ..
+        call deactivate
+        
+    - name: 准备发布文件
+      shell: cmd
+      run: |
+        REM 显示文件和目录结构用于调试
+        dir
+        dir UI
+        dir dist\ui.dist
+        
+        REM 移动并重命名ui.dist文件夹
+        if exist "dist\ui.dist" (
+          if exist "AutoNet4AHU" (
+            rmdir /s /q "AutoNet4AHU"
+          )
+          move "dist\ui.dist" "AutoNet4AHU"
+        )
+        
+        REM 复制所需文件到输出文件夹
+        REM 增加错误处理
+        echo "复制 task_template.xml"
+        xcopy "UI\task_template.xml" "AutoNet4AHU\" /y
+        
+        echo "复制 register_task.bat"
+        xcopy "UI\register_task.bat" "AutoNet4AHU\" /y
+        
+        echo "复制 unregister_task.bat"
+        xcopy "UI\unregister_task.bat" "AutoNet4AHU\" /y
+
+        echo "复制 ahu_eportal.vbs"
+        xcopy "UI\ahu_eportal.vbs" "AutoNet4AHU\" /y
+        
+        echo "复制 login.exe"
+        if exist "UI\login.exe" (
+          xcopy "UI\login.exe" "AutoNet4AHU\" /y
+        ) else (
+          echo "ERROR: login.exe 不存在，无法复制"
+          exit /b 1
+        )
+        
+        REM 创建ZIP压缩包
+        powershell -command "Compress-Archive -Path 'AutoNet4AHU' -DestinationPath 'AutoNet4AHU.zip' -Force"
+        
+    - name: 创建Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: AutoNet4AHU.zip
+        name: AutoNet4AHU ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          # AutoNet4AHU 发布版本 ${{ steps.get_version.outputs.VERSION }}
+          
+          此版本由GitHub Actions自动构建于 ${{ github.event.repository.updated_at }}
+          
+          ## 使用方法
+          1. 下载并解压 `AutoNet4AHU.zip`
+          2. 运行 `AutoNet4AHU.exe`
+          3. 按照界面提示配置并使用
+          
+          详细说明请参阅[README文档](https://github.com/biubush/AutoNet4AHU/blob/main/README.md)
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
