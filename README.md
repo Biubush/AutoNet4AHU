@@ -151,7 +151,7 @@ Author: [Biubush](https://github.com/biubush) from [AHU](https://www.ahu.edu.cn/
 3. 将该URL填入程序配置中
 4. 登录成功后，机器人将推送登录状态通知到群聊
 
-详细说明请参考[企业微信文档](https://open.work.weixin.qq.com/help2/pc/14931)的第六部分
+详细说明请参考[企业微信文档](https://open.work.weixin.qq.com/help2/pc/14931#%E5%85%AD%E3%80%81%E7%BE%A4%E6%9C%BA%E5%99%A8%E4%BA%BAWebhook%E5%9C%B0%E5%9D%80)
 
 ## 安装与编译
 
