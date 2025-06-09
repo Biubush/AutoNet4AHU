@@ -3,6 +3,7 @@
 
 import json
 import requests
+import os
 
 
 class Notifier:
@@ -19,6 +20,37 @@ class Notifier:
             self.webhook_urls = [webhook_urls]
         else:
             self.webhook_urls = webhook_urls
+        
+        # 获取系统代理设置
+        self.proxies = self._get_system_proxies()
+    
+    def _get_system_proxies(self):
+        """
+        获取系统代理设置
+        
+        Returns:
+            dict: 包含http和https代理的字典，如果没有代理则返回空字典
+        """
+        proxies = {}
+        # 检查环境变量中的代理设置
+        http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+        https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+        
+        if http_proxy:
+            proxies['http'] = http_proxy
+        if https_proxy:
+            proxies['https'] = https_proxy
+            
+        # 如果没有在环境变量中找到代理，则尝试使用requests的系统代理检测
+        if not proxies:
+            try:
+                system_proxies = requests.utils.get_environ_proxies('')
+                if system_proxies:
+                    proxies = system_proxies
+            except Exception as e:
+                print(f"获取系统代理时发生错误: {str(e)}")
+                
+        return proxies
     
     def send_text(self, content, mentioned_list=None, mentioned_mobile_list=None):
         """
@@ -61,7 +93,13 @@ class Notifier:
         for webhook in webhooks:
             try:
                 headers = {"Content-Type": "application/json"}
-                response = requests.post(webhook, headers=headers, data=json.dumps(data))
+                # 使用系统代理发送请求
+                response = requests.post(
+                    webhook, 
+                    headers=headers, 
+                    data=json.dumps(data),
+                    proxies=self.proxies if self.proxies else None  # 如果有代理则使用
+                )
                 if response.status_code != 200 or response.json()["errcode"] != 0:
                     print(f"发送消息失败: {response.json()}")
                     return False
@@ -78,4 +116,6 @@ if __name__ == "__main__":
     
     # 发送即时消息
     success = notifier.send_text("这是一条测试消息")
-    print(f"消息发送{'成功' if success else '失败'}") 
+    print(f"消息发送{'成功' if success else '失败'}")
+    # 打印当前使用的代理
+    print(f"当前系统代理设置: {notifier.proxies}") 
