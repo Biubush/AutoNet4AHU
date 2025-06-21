@@ -160,7 +160,7 @@ class LoginWidget(QWidget):
         try:
             # 确认是否注册
             title = '注册定时任务'
-            content = '确定要注册自动登录定时任务吗？这将允许程序在连接网络时自动登录校园网。'
+            content = '确定要注册自动登录定时任务吗？这将允许程序在连接网络时以及每3分钟自动登录校园网。'
             dialog = MessageBox(title, content, self)
             
             if dialog.exec():
